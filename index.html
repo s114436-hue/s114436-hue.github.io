@@ -1,11 +1,462 @@
-<!doctype html>
-<html>
-  <head>
-    <meta charset = "utf-8">
-    <title>^_^</title>
-    <link rel="icon" href="icon.png">
-  </head>
-  <body>
-      hello world
-  </body>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>瘋狂打老鼠 Arcade! (踩雷即死版)</title>
+    <style>
+        :root {
+            --game-bg: #2c3e50;
+            --panel-bg: #34495e;
+            --text-color: #ecf0f1;
+            --accent-color: #e74c3c;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--game-bg);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            user-select: none;
+            overflow: hidden;
+        }
+
+        h1 {
+            margin: 10px 0;
+            font-size: 2.5rem;
+            text-shadow: 3px 3px #c0392b;
+            color: #f1c40f;
+        }
+
+        .dashboard {
+            display: flex;
+            gap: 20px;
+            background: var(--panel-bg);
+            padding: 15px 30px;
+            border-radius: 50px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .stat-box span {
+            color: #f1c40f;
+            font-size: 1.5rem;
+        }
+
+        /* 遊戲舞台與搖晃動畫 */
+        .game-container {
+            position: relative;
+            width: 600px;
+            height: 450px;
+            background: #27ae60;
+            border: 10px solid #1e824c;
+            border-radius: 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 20px;
+            padding: 20px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5), 0 12px 24px rgba(0,0,0,0.4);
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><text y="30" font-size="30">🔨</text></svg>') 10 30, auto;
+        }
+
+        .game-container:active {
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><text y="30" font-size="30" transform="rotate(-30 10 30)">🔨</text></svg>') 10 30, auto;
+        }
+
+        /* 爆炸搖晃特效 CSS */
+        .shake {
+            animation: shakeAnimation 0.1s infinite;
+        }
+
+        @keyframes shakeAnimation {
+            0% { transform: translate(2px, 1px) rotate(0deg); }
+            20% { transform: translate(-3px, -2px) rotate(-1deg); }
+            40% { transform: translate(-1px, 3px) rotate(1deg); }
+            60% { transform: translate(3px, 2px) rotate(0deg); }
+            80% { transform: translate(-2px, -1px) rotate(-1deg); }
+            100% { transform: translate(2px, 3px) rotate(1deg); }
+        }
+
+        .hole {
+            position: relative;
+            overflow: hidden;
+            background: #1a5235;
+            border-radius: 50%;
+            box-shadow: inset 0 10px 10px rgba(0,0,0,0.6);
+        }
+
+        .hole::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 25px;
+            background: #27ae60;
+            border-radius: 50% 50% 0 0;
+            z-index: 5;
+        }
+
+        .mole {
+            position: absolute;
+            bottom: -100%;
+            left: 0;
+            width: 100%;
+            height: 85%;
+            transition: bottom 0.08s ease-out; /* 縮回鑽出速度加快 */
+            z-index: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3.8rem;
+        }
+
+        .mole.normal::before { content: '🐭'; }
+        
+        .mole.golden::before { content: '🐹'; }
+        .mole.golden {
+            filter: drop-shadow(0 0 12px #f1c40f) drop-shadow(0 0 25px #f1c40f);
+        }
+
+        .mole.bomb::before { content: '💣'; }
+
+        .hole.up .mole {
+            bottom: 15px;
+        }
+
+        /* 普通文字特效 */
+        .floating-text {
+            position: absolute;
+            font-weight: bold;
+            font-size: 1.3rem;
+            text-shadow: 2px 2px 0px #000;
+            animation: floatUp 0.7s ease-out forwards;
+            z-index: 10;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(0.8); opacity: 1; }
+            100% { transform: translateY(-60px) scale(1.1); opacity: 0; }
+        }
+
+        /* 爆炸專用超大字體 */
+        .floating-text.bomb-text {
+            font-size: 3rem;
+            animation: floatUpBomb 1.2s cubic-bezier(0.18, 0.89, 0.32, 1.5) forwards;
+        }
+
+        @keyframes floatUpBomb {
+            0% { transform: translateY(0) scale(0.3); opacity: 1; }
+            15% { transform: translateY(-30px) scale(1.4); opacity: 1; }
+            80% { transform: translateY(-40px) scale(1.1); opacity: 1; }
+            100% { transform: translateY(-80px) scale(0.5); opacity: 0; }
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            border-radius: 10px;
+            transition: opacity 0.3s ease;
+        }
+
+        .overlay.hide {
+            display: none;
+        }
+
+        .btn {
+            background: #e67e22;
+            border: none;
+            padding: 15px 40px;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 5px #d35400;
+            transition: all 0.1s;
+            margin-top: 20px;
+        }
+
+        .btn:hover { background: #f39c12; }
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 1px #d35400;
+        }
+
+        .combo-container {
+            color: #e74c3c;
+            font-size: 1.8rem;
+            min-height: 40px;
+            text-shadow: 1px 1px black;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>瘋狂打老鼠! (踩雷即死)</h1>
+
+    <div class="dashboard">
+        <div class="stat-box">得分: <span id="score">0</span></div>
+        <div class="stat-box">剩餘時間: <span id="time">30</span>s</div>
+        <div class="stat-box">最高紀錄: <span id="high-score">0</span></div>
+    </div>
+
+    <div class="combo-container" id="combo-box"></div>
+
+    <div class="game-container" id="stage">
+        <div class="overlay" id="overlay">
+            <h2 id="overlay-title" style="font-size: 2rem; margin: 0;">準備好挑戰了嗎？</h2>
+            <p id="overlay-desc" style="color: #bdc3c7; text-align: center; max-width: 80%; line-height: 1.6;">
+                🐹 黃金老鼠 +30分 | 🐭 普通老鼠 +10分<br>
+                ⚠️ <strong style="color:#e74c3c;">警告：點到炸彈 💣 會直接爆炸結束遊戲！</strong><br>
+                老鼠速度已大幅加快，拼手速的時候到了！
+            </p>
+            <button class="btn" id="start-btn">開始遊戲</button>
+        </div>
+
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+        <div class="hole"><div class="mole"></div></div>
+    </div>
+
+    <script>
+        const holes = document.querySelectorAll('.hole');
+        const stage = document.getElementById('stage');
+        const scoreBoard = document.getElementById('score');
+        const timeBoard = document.getElementById('time');
+        const highScoreBoard = document.getElementById('high-score');
+        const comboBox = document.getElementById('combo-box');
+        const overlay = document.getElementById('overlay');
+        const startBtn = document.getElementById('start-btn');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayDesc = document.getElementById('overlay-desc');
+
+        let lastHole;
+        let timeUp = false;
+        let score = 0;
+        let timeLeft = 30;
+        let combo = 0;
+        let countdownTimer;
+        let moleTimer;
+        let highScore = localStorage.getItem('whackMouseHighScore') || 0;
+
+        highScoreBoard.textContent = highScore;
+
+        // 炸彈死掉時的無情嘲諷語錄
+        const bombTaunts = [
+            "看清楚那是一顆炸彈好嗎？🤪",
+            "手殘直接現形！恭喜被炸飛！💥",
+            "眼睛不用可以捐給有需要的人～👁️",
+            "老鼠沒打到，倒是把炸彈抱得挺緊的。💣",
+            "就叫你不要點炸彈了，耳背嗎？👂"
+        ];
+        
+        // 時間到未滿 100 分的嘲諷
+        const lowScoreTaunts = [
+            "不到100分... 哈哈太弱了吧！🤪",
+            "阿嬤用腳打都破百了！👴",
+            "老鼠都在洞裡笑你手速慢欸～🐀"
+        ];
+
+        // 速度變快 (基礎 500ms ~ 1300ms)
+        function randomTime(min, max) {
+            const speedFactor = timeLeft > 15 ? 1 : (timeLeft > 7 ? 0.8 : 0.6);
+            return Math.round(Math.random() * (max - min) + min) * speedFactor;
+        }
+
+        function randomHole(holes) {
+            const idx = Math.floor(Math.random() * holes.length);
+            const hole = holes[idx];
+            if (hole === lastHole) {
+                return randomHole(holes);
+            }
+            lastHole = hole;
+            return hole;
+        }
+
+        function peep() {
+            const time = randomTime(500, 1300); // 這裡改快了！
+            const hole = randomHole(holes);
+            const mole = hole.querySelector('.mole');
+            
+            const rand = Math.random();
+            mole.className = 'mole';
+            
+            if (rand < 0.20) { // 稍微提高炸彈生成率增加威脅感
+                mole.classList.add('bomb');
+            } else if (rand > 0.85) {
+                mole.classList.add('golden');
+            } else {
+                mole.classList.add('normal');
+            }
+
+            hole.classList.add('up');
+            const stayTime = mole.classList.contains('golden') ? time * 0.65 : time;
+
+            moleTimer = setTimeout(() => {
+                hole.classList.remove('up');
+                if (!timeUp) peep();
+            }, stayTime);
+        }
+
+        function startGame() {
+            overlay.classList.add('hide');
+            stage.className = 'game-container'; // 移除搖晃 class
+            score = 0;
+            timeLeft = 30;
+            combo = 0;
+            timeUp = false;
+            scoreBoard.textContent = score;
+            timeBoard.textContent = timeLeft;
+            comboBox.textContent = '';
+
+            peep();
+            
+            countdownTimer = setInterval(() => {
+                timeLeft--;
+                timeBoard.textContent = timeLeft;
+
+                if (timeLeft <= 0) {
+                    clearInterval(countdownTimer);
+                    clearTimeout(moleTimer);
+                    timeUp = true;
+                    endGame(false); // 正常時間結束
+                }
+            }, 1000);
+        }
+
+        // 結算畫面 (新增 isBomb 參數來判斷是不是被炸死的)
+        function endGame(isBomb = false) {
+            holes.forEach(h => h.classList.remove('up'));
+            
+            if (isBomb) {
+                // 炸彈死掉
+                overlayTitle.textContent = '💥 BOOM! 遊戲結束！';
+                const randomBombTaunt = bombTaunts[Math.floor(Math.random() * bombTaunts.length)];
+                overlayDesc.innerHTML = `你點到炸彈被當場炸飛！<br>最終得分：<strong style="color:#e74c3c; font-size:1.8rem;">${score}</strong> 分<br><br><span style="color:#f39c12; font-weight:bold; font-size:1.2rem;">${randomBombTaunt}</span>`;
+                startBtn.textContent = '復活重玩';
+            } else {
+                // 正常時間到
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('whackMouseHighScore', highScore);
+                    highScoreBoard.textContent = highScore;
+                    overlayTitle.textContent = '🎉 創下新紀錄！太神啦！';
+                    overlayDesc.innerHTML = `最終得分：<strong style="color:#f1c40f; font-size:1.8rem;">${score}</strong> 分<br>竟然沒被炸死，算你厲害。`;
+                } else if (score < 100) {
+                    overlayTitle.textContent = '🤪 呃...這分數真的行嗎？';
+                    const randomTaunt = lowScoreTaunts[Math.floor(Math.random() * lowScoreTaunts.length)];
+                    overlayDesc.innerHTML = `你的最終得分是：<strong style="color:#e74c3c; font-size:1.8rem;">${score}</strong> 分<br><br><span style="color:#f39c12; font-weight:bold; font-size:1.2rem;">${randomTaunt}</span>`;
+                } else {
+                    overlayTitle.textContent = '時間到！順利通關';
+                    overlayDesc.innerHTML = `你的最終得分是：<strong style="color:#f1c40f; font-size:1.8rem;">${score}</strong> 分<br>手速還可以嘛，算你合格！`;
+                }
+                startBtn.textContent = '再挑戰一次';
+            }
+
+            overlay.classList.remove('hide');
+        }
+
+        function bonk(e) {
+            if(!e.isTrusted) return; 
+            
+            const mole = this;
+            const hole = mole.parentNode;
+            
+            if (!hole.classList.contains('up')) return;
+            
+            // 【核心修改】如果打到炸彈，立刻觸發爆炸事件
+            if (mole.classList.contains('bomb')) {
+                timeUp = true;
+                clearInterval(countdownTimer);
+                clearTimeout(moleTimer);
+                
+                // 畫面劇烈搖晃
+                stage.classList.add('shake');
+                
+                // 顯示超大爆炸特效文字
+                showFloatingText("💥 💥 B00M!! 💥 💥", "#e74c3c", e.pageX, e.pageY, true);
+                
+                // 延遲 0.8 秒（讓玩家感受一下畫面搖晃和爆炸）後，直接強制進結算重玩
+                setTimeout(() => {
+                    endGame(true);
+                }, 800);
+                
+                hole.classList.remove('up');
+                return;
+            }
+
+            // 沒打到炸彈，繼續算分
+            let points = 0;
+            let text = '';
+            let textColor = '#2ecc71';
+
+            if (mole.classList.contains('golden')) {
+                combo++;
+                const comboBonus = Math.floor(combo / 5) * 5;
+                points = 30 + comboBonus;
+                text = `+${points} 🐹✨`;
+                textColor = '#f1c40f';
+            } else {
+                combo++;
+                const comboBonus = Math.floor(combo / 5) * 2;
+                points = 10 + comboBonus;
+                text = `+${points} 🐭`;
+            }
+
+            score += points;
+            if (score < 0) score = 0; 
+            scoreBoard.textContent = score;
+            
+            if (combo >= 3) {
+                comboBox.textContent = `🔥 ${combo} COMBO!`;
+            }
+
+            showFloatingText(text, textColor, e.pageX, e.pageY, false);
+            hole.classList.remove('up');
+        }
+
+        function showFloatingText(text, color, x, y, isBomb) {
+            const fText = document.createElement('div');
+            fText.className = 'floating-text' + (isBomb ? ' bomb-text' : '');
+            fText.innerText = text;
+            fText.style.color = color;
+            fText.style.left = isBomb ? `${x - 140}px` : `${x - 60}px`; // 爆炸字很大，往左移一點
+            fText.style.top = `${y - 30}px`;
+            document.body.appendChild(fText);
+
+            setTimeout(() => {
+                fText.remove();
+            }, isBomb ? 1200 : 700);
+        }
+
+        const moles = document.querySelectorAll('.mole');
+        moles.forEach(mole => mole.addEventListener('click', bonk));
+        startBtn.addEventListener('click', startGame);
+    </script>
+</body>
 </html>
